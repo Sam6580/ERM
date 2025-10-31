@@ -15,10 +15,23 @@ public class Reflection implements Serializable {
         this.status = "Pending";
     }
 
-    public String getStudentName() { return studentName; }
-    public String getRollNo() { return rollNo; }
-    public String getReflectionText() { return reflectionText; }
-    public String getStatus() { return status; }
+    public String getStudentName() {
+        return studentName;
+    }
 
-    public void setStatus(String status) { this.status = status; }
+    public String getRollNo() {
+        return rollNo;
+    }
+
+    public String getReflectionText() {
+        return reflectionText;
+    }
+
+    public String getStatus() {
+        return status;
+    }
+
+    public void setStatus(String status) {
+        this.status = status;
+    }
 }
