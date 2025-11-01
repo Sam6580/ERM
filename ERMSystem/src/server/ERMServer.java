@@ -14,6 +14,14 @@ import java.util.List;
 
 public class ERMServer {
     public static void main(String[] args) {
+        try {
+            ProcessBuilder pb = new ProcessBuilder("scripts/start-mysql.sh");
+            Process p = pb.start();
+            p.waitFor();
+        } catch (IOException | InterruptedException e) {
+            e.printStackTrace();
+        }
+        DBConnection.createTableIfNotExists();
         try (ServerSocket serverSocket = new ServerSocket(5000)) {
             System.out.println("🚀 ERM Server started. Waiting for clients...");
             while (true) {

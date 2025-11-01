@@ -4,6 +4,7 @@ import client.ERMClient;
 import model.Reflection;
 
 import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
@@ -13,18 +14,19 @@ import java.util.List;
 import java.util.concurrent.ExecutionException;
 
 public class FacultyUI extends JFrame {
-    private final JTextArea displayArea;
+    private JTable table;
+    private DefaultTableModel tableModel;
+    private JTextArea reflectionDetailArea;
     private ERMClient client;
+    private List<Reflection> reflectionList;
 
     public FacultyUI() {
         setTitle("Faculty - View Reflections");
-        setSize(500, 400);
+        setSize(700, 500);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
         setLayout(new BorderLayout());
 
-        displayArea = new JTextArea();
-        displayArea.setEditable(false);
-        add(new JScrollPane(displayArea), BorderLayout.CENTER);
+        setupTableAndDetails();
 
         JButton fetchBtn = new JButton("Fetch Reflections");
         fetchBtn.addActionListener(e -> fetchReflections());
@@ -47,6 +49,37 @@ public class FacultyUI extends JFrame {
 
         setVisible(true);
         connectToServer();
+    }
+
+    private void setupTableAndDetails() {
+        tableModel = new DefaultTableModel(new String[]{"Name", "Roll No", "Status"}, 0) {
+            @Override
+            public boolean isCellEditable(int row, int column) {
+                return false;
+            }
+        };
+        table = new JTable(tableModel);
+        table.setSelectionMode(ListSelectionModel.SINGLE_SELECTION);
+
+        JScrollPane tableScrollPane = new JScrollPane(table);
+
+        reflectionDetailArea = new JTextArea("Select a reflection to see details.");
+        reflectionDetailArea.setEditable(false);
+        reflectionDetailArea.setWrapStyleWord(true);
+        reflectionDetailArea.setLineWrap(true);
+        JScrollPane detailScrollPane = new JScrollPane(reflectionDetailArea);
+
+        JSplitPane splitPane = new JSplitPane(JSplitPane.VERTICAL_SPLIT, tableScrollPane, detailScrollPane);
+        splitPane.setDividerLocation(200);
+
+        add(splitPane, BorderLayout.CENTER);
+
+        table.getSelectionModel().addListSelectionListener(e -> {
+            if (!e.getValueIsAdjusting() && table.getSelectedRow() != -1) {
+                Reflection selected = reflectionList.get(table.getSelectedRow());
+                reflectionDetailArea.setText(selected.getReflectionText());
+            }
+        });
     }
 
     private void connectToServer() {
@@ -95,14 +128,10 @@ public class FacultyUI extends JFrame {
             @Override
             protected void done() {
                 try {
-                    List<Reflection> list = get();
-                    displayArea.setText("");
-                    for (Reflection r : list) {
-                        displayArea.append("Name: " + r.getStudentName() + "\n");
-                        displayArea.append("Roll No: " + r.getRollNo() + "\n");
-                        displayArea.append("Reflection: " + r.getReflectionText() + "\n");
-                        displayArea.append("Status: " + r.getStatus() + "\n");
-                        displayArea.append("------------------------------------\n");
+                    reflectionList = get();
+                    tableModel.setRowCount(0); // Clear existing data
+                    for (Reflection r : reflectionList) {
+                        tableModel.addRow(new Object[]{r.getStudentName(), r.getRollNo(), r.getStatus()});
                     }
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
@@ -112,6 +141,16 @@ public class FacultyUI extends JFrame {
     }
 
     public static void main(String[] args) {
+        try {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            // If Nimbus is not available, you can set the GUI to default look and feel.
+        }
         SwingUtilities.invokeLater(FacultyUI::new);
     }
 }

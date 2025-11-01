@@ -12,29 +12,35 @@ import java.io.IOException;
 public class StudentUI extends JFrame {
     private final JTextField nameField, rollField;
     private final JTextArea reflectionArea;
+    private final JButton submitBtn;
     private ERMClient client;
 
     public StudentUI() {
         setTitle("Student - End Review Reflection");
         setSize(400, 400);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLayout(new BorderLayout());
+        setLayout(new BorderLayout(5, 5));
 
-        JPanel top = new JPanel(new GridLayout(2, 2));
-        top.add(new JLabel("Name:"));
+        JPanel formPanel = new JPanel(new GridLayout(2, 2, 5, 5));
+        formPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
+        formPanel.add(new JLabel("Name:"));
         nameField = new JTextField();
-        top.add(nameField);
-        top.add(new JLabel("Roll No:"));
+        formPanel.add(nameField);
+        formPanel.add(new JLabel("Roll No:"));
         rollField = new JTextField();
-        top.add(rollField);
-        add(top, BorderLayout.NORTH);
+        formPanel.add(rollField);
+        add(formPanel, BorderLayout.NORTH);
 
         reflectionArea = new JTextArea("Write your reflection here...");
+        reflectionArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         add(new JScrollPane(reflectionArea), BorderLayout.CENTER);
 
-        JButton submitBtn = new JButton("Submit");
+        submitBtn = new JButton("Submit");
         submitBtn.addActionListener(e -> submitReflection());
-        add(submitBtn, BorderLayout.SOUTH);
+        JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
+        southPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
+        southPanel.add(submitBtn);
+        add(southPanel, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
             @Override
@@ -97,6 +103,7 @@ public class StudentUI extends JFrame {
         }
 
         Reflection reflection = new Reflection(name, rollNo, reflectionText);
+        submitBtn.setEnabled(false);
 
         new SwingWorker<String, Void>() {
             @Override
@@ -114,14 +121,31 @@ public class StudentUI extends JFrame {
                 try {
                     String response = get();
                     JOptionPane.showMessageDialog(StudentUI.this, response);
+                    if (response.startsWith("Success")) {
+                        nameField.setText("");
+                        rollField.setText("");
+                        reflectionArea.setText("");
+                    }
                 } catch (Exception e) {
                     e.printStackTrace();
+                } finally {
+                    submitBtn.setEnabled(true);
                 }
             }
         }.execute();
     }
 
     public static void main(String[] args) {
+        try {
+            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
+                if ("Nimbus".equals(info.getName())) {
+                    UIManager.setLookAndFeel(info.getClassName());
+                    break;
+                }
+            }
+        } catch (Exception e) {
+            // If Nimbus is not available, you can set the GUI to default look and feel.
+        }
         SwingUtilities.invokeLater(StudentUI::new);
     }
 }
