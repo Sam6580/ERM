@@ -1,46 +1,42 @@
-package ui;
+package src.ui;
 
-import client.ERMClient;
-import model.Reflection;
-
-import javax.swing.*;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
+import javax.swing.*;
+import src.client.ERMClient;
+import src.model.Reflection;
 
 public class StudentUI extends JFrame {
-    private final JTextField nameField, rollField;
+    private final JTextField nameField, rollField, subjectField;
     private final JTextArea reflectionArea;
-    private final JButton submitBtn;
     private ERMClient client;
 
     public StudentUI() {
         setTitle("Student - End Review Reflection");
-        setSize(400, 400);
+        setSize(400, 450);
         setDefaultCloseOperation(JFrame.DO_NOTHING_ON_CLOSE);
-        setLayout(new BorderLayout(5, 5));
+        setLayout(new BorderLayout());
 
-        JPanel formPanel = new JPanel(new GridLayout(2, 2, 5, 5));
-        formPanel.setBorder(BorderFactory.createEmptyBorder(10, 10, 10, 10));
-        formPanel.add(new JLabel("Name:"));
+        JPanel top = new JPanel(new GridLayout(3, 2));
+        top.add(new JLabel("Name:"));
         nameField = new JTextField();
-        formPanel.add(nameField);
-        formPanel.add(new JLabel("Roll No:"));
+        top.add(nameField);
+        top.add(new JLabel("Roll No:"));
         rollField = new JTextField();
-        formPanel.add(rollField);
-        add(formPanel, BorderLayout.NORTH);
+        top.add(rollField);
+        top.add(new JLabel("Subject:"));
+        subjectField = new JTextField();
+        top.add(subjectField);
+        add(top, BorderLayout.NORTH);
 
         reflectionArea = new JTextArea("Write your reflection here...");
-        reflectionArea.setBorder(BorderFactory.createEmptyBorder(5, 5, 5, 5));
         add(new JScrollPane(reflectionArea), BorderLayout.CENTER);
 
-        submitBtn = new JButton("Submit");
+        JButton submitBtn = new JButton("Submit");
         submitBtn.addActionListener(e -> submitReflection());
-        JPanel southPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT));
-        southPanel.setBorder(BorderFactory.createEmptyBorder(0, 10, 10, 10));
-        southPanel.add(submitBtn);
-        add(southPanel, BorderLayout.SOUTH);
+        add(submitBtn, BorderLayout.SOUTH);
 
         addWindowListener(new WindowAdapter() {
             @Override
@@ -78,10 +74,22 @@ public class StudentUI extends JFrame {
                 try {
                     client = get();
                     if (client == null) {
-                        JOptionPane.showMessageDialog(StudentUI.this, "Failed to connect to the server.", "Connection Error", JOptionPane.ERROR_MESSAGE);
+                        JOptionPane.showMessageDialog(StudentUI.this,
+                                "Failed to connect to the server. Please make sure the server is running on port 5000.",
+                                "Connection Error",
+                                JOptionPane.ERROR_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(StudentUI.this,
+                                "Successfully connected to the server.",
+                                "Connected",
+                                JOptionPane.INFORMATION_MESSAGE);
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
+                    JOptionPane.showMessageDialog(StudentUI.this,
+                            "An error occurred while connecting: " + e.getMessage(),
+                            "Connection Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         }.execute();
@@ -95,15 +103,15 @@ public class StudentUI extends JFrame {
 
         String name = nameField.getText().trim();
         String rollNo = rollField.getText().trim();
+        String subject = subjectField.getText().trim();
         String reflectionText = reflectionArea.getText().trim();
 
-        if (name.isEmpty() || rollNo.isEmpty() || reflectionText.isEmpty()) {
+        if (name.isEmpty() || rollNo.isEmpty() || subject.isEmpty() || reflectionText.isEmpty()) {
             JOptionPane.showMessageDialog(this, "All fields must be filled out.", "Validation Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
-        Reflection reflection = new Reflection(name, rollNo, reflectionText);
-        submitBtn.setEnabled(false);
+        Reflection reflection = new Reflection(name, rollNo, subject, reflectionText);
 
         new SwingWorker<String, Void>() {
             @Override
@@ -120,32 +128,28 @@ public class StudentUI extends JFrame {
             protected void done() {
                 try {
                     String response = get();
-                    JOptionPane.showMessageDialog(StudentUI.this, response);
-                    if (response.startsWith("Success")) {
+                    if (response != null && response.startsWith("Error:")) {
+                        JOptionPane.showMessageDialog(StudentUI.this, response, "Submission Error", JOptionPane.ERROR_MESSAGE);
+                    } else {
+                        JOptionPane.showMessageDialog(StudentUI.this, response, "Submission Result", JOptionPane.INFORMATION_MESSAGE);
+                        // Clear form after successful submission
                         nameField.setText("");
                         rollField.setText("");
-                        reflectionArea.setText("");
+                        subjectField.setText("");
+                        reflectionArea.setText("Write your reflection here...");
                     }
                 } catch (Exception e) {
                     e.printStackTrace();
-                } finally {
-                    submitBtn.setEnabled(true);
+                    JOptionPane.showMessageDialog(StudentUI.this,
+                            "An error occurred while submitting: " + e.getMessage(),
+                            "Submission Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         }.execute();
     }
 
     public static void main(String[] args) {
-        try {
-            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            // If Nimbus is not available, you can set the GUI to default look and feel.
-        }
         SwingUtilities.invokeLater(StudentUI::new);
     }
 }

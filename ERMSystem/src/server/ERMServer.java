@@ -1,27 +1,20 @@
-package server;
+package src.server;
 
-import database.DBConnection;
-import model.Reflection;
-
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
+import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.sql.*;
 import java.util.ArrayList;
 import java.util.List;
+import src.database.DBConnection;
+import src.model.Reflection;
 
 public class ERMServer {
     public static void main(String[] args) {
-        try {
-            ProcessBuilder pb = new ProcessBuilder("scripts/start-mysql.sh");
-            Process p = pb.start();
-            p.waitFor();
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
+        // Initialize database table before accepting connections
+        System.out.println("🔧 Initializing database...");
         DBConnection.createTableIfNotExists();
+
         try (ServerSocket serverSocket = new ServerSocket(5000)) {
             System.out.println("🚀 ERM Server started. Waiting for clients...");
             while (true) {
@@ -30,6 +23,7 @@ public class ERMServer {
                 new ClientHandler(socket).start();
             }
         } catch (IOException e) {
+            System.err.println("❌ Server error: " + e.getMessage());
             e.printStackTrace();
         }
     }
@@ -42,6 +36,7 @@ class ClientHandler extends Thread {
         this.socket = socket;
     }
 
+    @Override
     public void run() {
         try (Socket s = socket;
              ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
@@ -50,36 +45,70 @@ class ClientHandler extends Thread {
             Object obj = ois.readObject();
 
             try (Connection conn = DBConnection.getConnection()) {
-                if (obj instanceof Reflection) {
-                    Reflection reflection = (Reflection) obj;
-                    String query = "INSERT INTO reflections (student_name, roll_no, reflection) VALUES (?, ?, ?)";
+                if (obj instanceof Reflection reflection) {
+                    String query = "INSERT INTO reflections (student_name, roll_no, subject, reflection, faculty_feedback, rating, submitted_at, status) VALUES (?, ?, ?, ?, ?, ?, ?, ?)";
                     try (PreparedStatement ps = conn.prepareStatement(query)) {
                         ps.setString(1, reflection.getStudentName());
-                        ps.setString(2, reflection.getRollNo());
-                        ps.setString(3, reflection.getReflectionText());
+                        ps.setString(2, reflection.getRegisterNumber());
+                        ps.setString(3, reflection.getSubject());
+                        ps.setString(4, reflection.getReflectionText());
+                        String feedback = reflection.getFacultyFeedback();
+                        ps.setString(5, feedback != null ? feedback : "");
+                        ps.setDouble(6, reflection.getRating());
+                        ps.setTimestamp(7, Timestamp.valueOf(reflection.getSubmittedAt()));
+                        ps.setString(8, reflection.getStatus() != null ? reflection.getStatus() : "Pending");
                         ps.executeUpdate();
                         oos.writeObject("✅ Reflection submitted successfully!");
+                        System.out.println("✅ Reflection saved: " + reflection.getStudentName() + " - " + reflection.getSubject());
+                    } catch (SQLException e) {
+                        System.err.println("❌ SQL Error inserting reflection: " + e.getMessage());
+                        System.err.println("SQL State: " + e.getSQLState());
+                        e.printStackTrace();
+                        String errorMsg = "❌ Database error: " + e.getMessage();
+                        if (e.getMessage() != null && e.getMessage().contains("Unknown column")) {
+                            errorMsg += "\n\n⚠️ Column mismatch detected! Please restart the server to update the database schema.";
+                        }
+                        oos.writeObject(errorMsg);
                     }
                 } else if (obj instanceof String && "FETCH".equals(obj)) {
-                    String query = "SELECT * FROM reflections";
+                    String query = "SELECT * FROM reflections ORDER BY submitted_at DESC";
                     try (Statement stmt = conn.createStatement();
                          ResultSet rs = stmt.executeQuery(query)) {
                         List<Reflection> list = new ArrayList<>();
                         while (rs.next()) {
+                            String feedback = rs.getString("faculty_feedback");
                             Reflection ref = new Reflection(
+                                    rs.getInt("id"),
                                     rs.getString("student_name"),
                                     rs.getString("roll_no"),
-                                    rs.getString("reflection")
+                                    rs.getString("subject"),
+                                    rs.getString("reflection"),
+                                    feedback != null ? feedback : "",
+                                    rs.getDouble("rating"),
+                                    rs.getTimestamp("submitted_at").toLocalDateTime()
                             );
-                            ref.setStatus(rs.getString("status"));
+                            String status = rs.getString("status");
+                            ref.setStatus(status != null ? status : "Pending");
                             list.add(ref);
                         }
                         oos.writeObject(list);
+                        System.out.println("✅ Fetched " + list.size() + " reflection(s)");
+                    } catch (SQLException e) {
+                        System.err.println("❌ SQL Error fetching reflections: " + e.getMessage());
+                        e.printStackTrace();
+                        oos.writeObject("❌ Database error: " + e.getMessage());
                     }
+                } else {
+                    oos.writeObject("❌ Unknown request type");
                 }
             } catch (SQLException e) {
+                System.err.println("❌ Database connection error: " + e.getMessage());
                 e.printStackTrace();
-                // Optionally send an error message to the client
+                try {
+                    oos.writeObject("❌ Server database error: " + e.getMessage());
+                } catch (IOException ioEx) {
+                    ioEx.printStackTrace();
+                }
             }
 
         } catch (IOException | ClassNotFoundException e) {

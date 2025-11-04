@@ -1,89 +1,58 @@
 package src.client;
 
-import database.DBConnection;
-import model.Reflection;
-
-import java.io.IOException;
-import java.io.ObjectInputStream;
-import java.io.ObjectOutputStream;
-import java.net.ServerSocket;
+import java.io.*;
 import java.net.Socket;
-import java.sql.*;
-import java.util.ArrayList;
 import java.util.List;
+import src.model.Reflection;
 
-public class ERMServer {
-    public static void main(String[] args) {
+public class ERMClient {
+    private Socket socket;
+    private ObjectOutputStream oos;
+    private ObjectInputStream ois;
+
+    public ERMClient() throws IOException {
         try {
-            ProcessBuilder pb = new ProcessBuilder("scripts/start-mysql.sh");
-            Process p = pb.start();
-            p.waitFor();
-        } catch (IOException | InterruptedException e) {
-            e.printStackTrace();
-        }
-        DBConnection.createTableIfNotExists();
-        try (ServerSocket serverSocket = new ServerSocket(5000)) {
-            System.out.println("🚀 ERM Server started. Waiting for clients...");
-            while (true) {
-                Socket socket = serverSocket.accept();
-                System.out.println("✅ Client connected!");
-                new ClientHandler(socket).start();
-            }
+            this.socket = new Socket("localhost", 5000); // Connect to server
+            this.oos = new ObjectOutputStream(socket.getOutputStream());
+            this.ois = new ObjectInputStream(socket.getInputStream());
+            System.out.println("✅ Connected to ERM Server");
         } catch (IOException e) {
-            e.printStackTrace();
+            System.err.println("❌ Failed to connect to server: " + e.getMessage());
+            throw new IOException("Unable to connect to server. Make sure the server is running on port 5000.", e);
         }
     }
-}
 
-class ClientHandler extends Thread {
-    private final Socket socket;
-
-    public ClientHandler(Socket socket) {
-        this.socket = socket;
+    // Send a Reflection object to the server
+    public String sendReflection(Reflection reflection) throws IOException, ClassNotFoundException {
+        oos.writeObject(reflection);
+        oos.flush();
+        Object response = ois.readObject();
+        return response instanceof String ? (String) response : "Unexpected response from server.";
     }
 
-    public void run() {
-        try (Socket s = socket;
-             ObjectInputStream ois = new ObjectInputStream(s.getInputStream());
-             ObjectOutputStream oos = new ObjectOutputStream(s.getOutputStream())) {
+    // Request all reflections from the server
+    @SuppressWarnings("unchecked")
+    public List<Reflection> fetchReflections() throws IOException, ClassNotFoundException {
+        oos.writeObject("FETCH");
+        oos.flush();
+        Object response = ois.readObject();
+        if (response instanceof List<?>) {
+            return (List<Reflection>) response;
+        } else {
+            throw new IOException("Invalid response from server.");
+        }
+    }
 
-            Object obj = ois.readObject();
-
-            try (Connection conn = DBConnection.getConnection()) {
-                if (obj instanceof Reflection) {
-                    Reflection reflection = (Reflection) obj;
-                    String query = "INSERT INTO reflections (student_name, roll_no, reflection) VALUES (?, ?, ?)";
-                    try (PreparedStatement ps = conn.prepareStatement(query)) {
-                        ps.setString(1, reflection.getStudentName());
-                        ps.setString(2, reflection.getRollNo());
-                        ps.setString(3, reflection.getReflectionText());
-                        ps.executeUpdate();
-                        oos.writeObject("✅ Reflection submitted successfully!");
-                    }
-                } else if (obj instanceof String && "FETCH".equals(obj)) {
-                    String query = "SELECT * FROM reflections";
-                    try (Statement stmt = conn.createStatement();
-                         ResultSet rs = stmt.executeQuery(query)) {
-                        List<Reflection> list = new ArrayList<>();
-                        while (rs.next()) {
-                            Reflection ref = new Reflection(
-                                    rs.getString("student_name"),
-                                    rs.getString("roll_no"),
-                                    rs.getString("reflection")
-                            );
-                            ref.setStatus(rs.getString("status"));
-                            list.add(ref);
-                        }
-                        oos.writeObject(list);
-                    }
-                }
-            } catch (SQLException e) {
-                e.printStackTrace();
-                // Optionally send an error message to the client
-            }
-
-        } catch (IOException | ClassNotFoundException e) {
-            e.printStackTrace();
+    // Close the connection
+    public void close() throws IOException {
+        try {
+            if (ois != null) ois.close();
+            if (oos != null) oos.close();
+            if (socket != null && !socket.isClosed()) socket.close();
+            System.out.println("✅ Connection closed");
+        } catch (IOException e) {
+            System.err.println("⚠️ Error closing connection: " + e.getMessage());
+            throw e;
         }
     }
 }

@@ -1,17 +1,15 @@
-package ui;
+package src.ui;
 
-import client.ERMClient;
-import model.Reflection;
-
-import javax.swing.*;
-import javax.swing.table.DefaultTableModel;
 import java.awt.*;
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
 import java.io.IOException;
-import java.util.Collections;
 import java.util.List;
 import java.util.concurrent.ExecutionException;
+import javax.swing.*;
+import javax.swing.table.DefaultTableModel;
+import src.client.ERMClient;
+import src.model.Reflection;
 
 public class FacultyUI extends JFrame {
     private JTable table;
@@ -52,7 +50,7 @@ public class FacultyUI extends JFrame {
     }
 
     private void setupTableAndDetails() {
-        tableModel = new DefaultTableModel(new String[]{"Name", "Roll No", "Status"}, 0) {
+        tableModel = new DefaultTableModel(new String[]{"Name", "Register No", "Status"}, 0) {
             @Override
             public boolean isCellEditable(int row, int column) {
                 return false;
@@ -75,9 +73,9 @@ public class FacultyUI extends JFrame {
         add(splitPane, BorderLayout.CENTER);
 
         table.getSelectionModel().addListSelectionListener(e -> {
-            if (!e.getValueIsAdjusting() && table.getSelectedRow() != -1) {
+            if (!e.getValueIsAdjusting() && table.getSelectedRow() != -1 && reflectionList != null) {
                 Reflection selected = reflectionList.get(table.getSelectedRow());
-                reflectionDetailArea.setText(selected.getReflectionText());
+                reflectionDetailArea.setText(selected.toString());
             }
         });
     }
@@ -110,7 +108,7 @@ public class FacultyUI extends JFrame {
 
     private void fetchReflections() {
         if (client == null) {
-            JOptionPane.showMessageDialog(this, "Not connected to the server.", "Error", JOptionPane.ERROR_MESSAGE);
+            JOptionPane.showMessageDialog(this, "Not connected to the server.", "Connection Error", JOptionPane.ERROR_MESSAGE);
             return;
         }
 
@@ -121,7 +119,7 @@ public class FacultyUI extends JFrame {
                     return client.fetchReflections();
                 } catch (IOException | ClassNotFoundException e) {
                     e.printStackTrace();
-                    return Collections.emptyList();
+                    return null; // Return null to indicate error
                 }
             }
 
@@ -129,28 +127,42 @@ public class FacultyUI extends JFrame {
             protected void done() {
                 try {
                     reflectionList = get();
+                    if (reflectionList == null) {
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                                "Failed to fetch reflections from server. Please check server connection and try again.",
+                                "Fetch Error",
+                                JOptionPane.ERROR_MESSAGE);
+                        return;
+                    }
+
                     tableModel.setRowCount(0); // Clear existing data
-                    for (Reflection r : reflectionList) {
-                        tableModel.addRow(new Object[]{r.getStudentName(), r.getRollNo(), r.getStatus()});
+                    if (reflectionList.isEmpty()) {
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                                "No reflections found in the database.",
+                                "No Data",
+                                JOptionPane.INFORMATION_MESSAGE);
+                        reflectionDetailArea.setText("No reflections available.");
+                    } else {
+                        for (Reflection r : reflectionList) {
+                            tableModel.addRow(new Object[]{r.getStudentName(), r.getRegisterNumber(), r.getStatus()});
+                        }
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                                "Successfully fetched " + reflectionList.size() + " reflection(s).",
+                                "Success",
+                                JOptionPane.INFORMATION_MESSAGE);
                     }
                 } catch (InterruptedException | ExecutionException e) {
                     e.printStackTrace();
+                    JOptionPane.showMessageDialog(FacultyUI.this,
+                            "An error occurred while fetching reflections: " + e.getMessage(),
+                            "Error",
+                            JOptionPane.ERROR_MESSAGE);
                 }
             }
         }.execute();
     }
 
     public static void main(String[] args) {
-        try {
-            for (UIManager.LookAndFeelInfo info : UIManager.getInstalledLookAndFeels()) {
-                if ("Nimbus".equals(info.getName())) {
-                    UIManager.setLookAndFeel(info.getClassName());
-                    break;
-                }
-            }
-        } catch (Exception e) {
-            // If Nimbus is not available, you can set the GUI to default look and feel.
-        }
         SwingUtilities.invokeLater(FacultyUI::new);
     }
 }
