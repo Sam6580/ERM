@@ -23,9 +23,11 @@ public class FacultyUI extends JFrame {
     private JLabel connectionStatusLabel;
     private JLabel countLabel;
     private JComboBox<String> statusFilter;
+    private JButton reviewBtn;
     private ERMClient client;
     private List<Reflection> reflectionList;
     private List<Reflection> filteredList;
+    private Reflection currentReflection;
     private static final Color PRIMARY_COLOR = new Color(52, 73, 94);
     private static final Color SUCCESS_COLOR = new Color(46, 125, 50);
     private static final Color ERROR_COLOR = new Color(198, 40, 40);
@@ -244,9 +246,13 @@ public class FacultyUI extends JFrame {
             if (!e.getValueIsAdjusting() && table.getSelectedRow() != -1 && filteredList != null) {
                 int selectedRow = table.getSelectedRow();
                 if (selectedRow >= 0 && selectedRow < filteredList.size()) {
-                    Reflection selected = filteredList.get(selectedRow);
-                    displayReflectionDetails(selected);
+                    currentReflection = filteredList.get(selectedRow);
+                    displayReflectionDetails(currentReflection);
+                    reviewBtn.setEnabled(true);
                 }
+            } else {
+                reviewBtn.setEnabled(false);
+                currentReflection = null;
             }
         });
 
@@ -278,7 +284,17 @@ public class FacultyUI extends JFrame {
         scrollPane.setBorder(null);
         scrollPane.setVerticalScrollBarPolicy(JScrollPane.VERTICAL_SCROLLBAR_AS_NEEDED);
 
+        // Review Button Panel
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        buttonPanel.setBackground(Color.WHITE);
+        
+        reviewBtn = createStyledButton("Review & Provide Feedback", PRIMARY_COLOR, 200, 35);
+        reviewBtn.setEnabled(false);
+        reviewBtn.addActionListener(e -> openReviewDialog());
+        buttonPanel.add(reviewBtn);
+
         detailsPanel.add(scrollPane, BorderLayout.CENTER);
+        detailsPanel.add(buttonPanel, BorderLayout.SOUTH);
 
         return detailsPanel;
     }
@@ -424,6 +440,8 @@ public class FacultyUI extends JFrame {
 
                     filteredList = reflectionList;
                     updateTable();
+                    currentReflection = null;
+                    reviewBtn.setEnabled(false);
                     
                     if (reflectionList.isEmpty()) {
                         reflectionDetailArea.setText("No reflections available in the database.");
@@ -517,6 +535,191 @@ public class FacultyUI extends JFrame {
                 ? reflection.getFacultyFeedback() : "No feedback provided yet."
         );
         reflectionDetailArea.setText(details);
+    }
+
+    private void openReviewDialog() {
+        if (currentReflection == null || client == null) {
+            JOptionPane.showMessageDialog(this,
+                "Please select a reflection first.",
+                "No Selection",
+                JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+
+        JDialog reviewDialog = new JDialog(this, "Review Reflection", true);
+        reviewDialog.setSize(600, 500);
+        reviewDialog.setLocationRelativeTo(this);
+        reviewDialog.setLayout(new BorderLayout(10, 10));
+        ((JPanel) reviewDialog.getContentPane()).setBorder(new EmptyBorder(15, 15, 15, 15));
+
+        JPanel mainPanel = new JPanel(new BorderLayout(10, 10));
+
+        // Student Info Panel
+        JPanel infoPanel = new JPanel(new GridBagLayout());
+        infoPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            "Student Information", TitledBorder.LEFT, TitledBorder.TOP,
+            new Font("Segoe UI", Font.BOLD, 12), PRIMARY_COLOR));
+        GridBagConstraints gbc = new GridBagConstraints();
+        gbc.insets = new Insets(5, 5, 5, 5);
+        gbc.anchor = GridBagConstraints.WEST;
+
+        gbc.gridx = 0; gbc.gridy = 0;
+        infoPanel.add(new JLabel("Name:"), gbc);
+        gbc.gridx = 1;
+        infoPanel.add(new JLabel(currentReflection.getStudentName()), gbc);
+        gbc.gridx = 0; gbc.gridy = 1;
+        infoPanel.add(new JLabel("Roll No:"), gbc);
+        gbc.gridx = 1;
+        infoPanel.add(new JLabel(currentReflection.getRegisterNumber()), gbc);
+        gbc.gridx = 0; gbc.gridy = 2;
+        infoPanel.add(new JLabel("Subject:"), gbc);
+        gbc.gridx = 1;
+        infoPanel.add(new JLabel(currentReflection.getSubject()), gbc);
+
+        // Rating Panel
+        JPanel ratingPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        ratingPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            "Rating (0.0 - 10.0)", TitledBorder.LEFT, TitledBorder.TOP,
+            new Font("Segoe UI", Font.BOLD, 12), PRIMARY_COLOR));
+        
+        SpinnerNumberModel ratingModel = new SpinnerNumberModel(
+            currentReflection.getRating(), 0.0, 10.0, 0.5);
+        JSpinner ratingSpinner = new JSpinner(ratingModel);
+        ratingSpinner.setPreferredSize(new Dimension(100, 30));
+        ratingPanel.add(ratingSpinner);
+
+        // Status Panel
+        JPanel statusPanel = new JPanel(new FlowLayout(FlowLayout.LEFT, 10, 10));
+        statusPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            "Status", TitledBorder.LEFT, TitledBorder.TOP,
+            new Font("Segoe UI", Font.BOLD, 12), PRIMARY_COLOR));
+        
+        String[] statuses = {"Pending", "Reviewed", "Approved", "Rejected"};
+        JComboBox<String> statusCombo = new JComboBox<>(statuses);
+        statusCombo.setSelectedItem(currentReflection.getStatus());
+        statusCombo.setPreferredSize(new Dimension(150, 30));
+        statusPanel.add(statusCombo);
+
+        // Feedback Panel
+        JPanel feedbackPanel = new JPanel(new BorderLayout());
+        feedbackPanel.setBorder(BorderFactory.createTitledBorder(
+            BorderFactory.createLineBorder(new Color(200, 200, 200)),
+            "Faculty Feedback", TitledBorder.LEFT, TitledBorder.TOP,
+            new Font("Segoe UI", Font.BOLD, 12), PRIMARY_COLOR));
+        
+        JTextArea feedbackArea = new JTextArea(
+            currentReflection.getFacultyFeedback() != null ? currentReflection.getFacultyFeedback() : "", 5, 30);
+        feedbackArea.setFont(new Font("Segoe UI", Font.PLAIN, 12));
+        feedbackArea.setLineWrap(true);
+        feedbackArea.setWrapStyleWord(true);
+        feedbackArea.setBorder(new EmptyBorder(5, 5, 5, 5));
+        JScrollPane feedbackScroll = new JScrollPane(feedbackArea);
+        feedbackPanel.add(feedbackScroll, BorderLayout.CENTER);
+
+        // Buttons
+        JPanel buttonPanel = new JPanel(new FlowLayout(FlowLayout.RIGHT, 10, 10));
+        JButton cancelBtn = createStyledButton("Cancel", new Color(100, 100, 100), 100, 35);
+        cancelBtn.addActionListener(e -> reviewDialog.dispose());
+        
+        JButton saveBtn = createStyledButton("Save Review", SUCCESS_COLOR, 120, 35);
+        saveBtn.addActionListener(e -> {
+            double rating = ((Number) ratingSpinner.getValue()).doubleValue();
+            String status = (String) statusCombo.getSelectedItem();
+            String feedback = feedbackArea.getText().trim();
+            
+            currentReflection.setRating(rating);
+            currentReflection.setStatus(status);
+            currentReflection.setFacultyFeedback(feedback);
+            
+            updateReflection(currentReflection);
+            reviewDialog.dispose();
+        });
+        
+        buttonPanel.add(cancelBtn);
+        buttonPanel.add(saveBtn);
+
+        // Layout
+        JPanel topPanel = new JPanel(new GridLayout(1, 2, 10, 10));
+        topPanel.add(ratingPanel);
+        topPanel.add(statusPanel);
+        
+        mainPanel.add(infoPanel, BorderLayout.NORTH);
+        mainPanel.add(topPanel, BorderLayout.CENTER);
+        mainPanel.add(feedbackPanel, BorderLayout.SOUTH);
+        
+        reviewDialog.add(mainPanel, BorderLayout.CENTER);
+        reviewDialog.add(buttonPanel, BorderLayout.SOUTH);
+        
+        reviewDialog.setVisible(true);
+    }
+
+    private void updateReflection(Reflection reflection) {
+        if (client == null) {
+            JOptionPane.showMessageDialog(this,
+                "Not connected to the server.",
+                "Connection Error",
+                JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        reviewBtn.setEnabled(false);
+        new SwingWorker<String, Void>() {
+            @Override
+            protected String doInBackground() {
+                try {
+                    return client.updateReflection(reflection);
+                } catch (IOException | ClassNotFoundException e) {
+                    e.printStackTrace();
+                    return "Error: " + e.getMessage();
+                }
+            }
+
+            @Override
+            protected void done() {
+                reviewBtn.setEnabled(true);
+                try {
+                    String response = get();
+                    if (response != null && response.startsWith("Error:")) {
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                            response,
+                            "Update Error",
+                            JOptionPane.ERROR_MESSAGE);
+                    } else if (response != null && response.startsWith("✅")) {
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                            "<html><div style='text-align: center;'>" +
+                            "<h3>Success!</h3>" +
+                            "Reflection review has been updated successfully.</div></html>",
+                            "Update Successful",
+                            JOptionPane.INFORMATION_MESSAGE);
+                        
+                        // Refresh the display
+                        displayReflectionDetails(reflection);
+                        
+                        // Update the table
+                        int selectedRow = table.getSelectedRow();
+                        if (selectedRow >= 0 && filteredList != null && selectedRow < filteredList.size()) {
+                            filteredList.set(selectedRow, reflection);
+                            updateTable();
+                            table.setRowSelectionInterval(selectedRow, selectedRow);
+                        }
+                    } else {
+                        JOptionPane.showMessageDialog(FacultyUI.this,
+                            response,
+                            "Update Result",
+                            JOptionPane.INFORMATION_MESSAGE);
+                    }
+                } catch (Exception e) {
+                    e.printStackTrace();
+                    JOptionPane.showMessageDialog(FacultyUI.this,
+                        "An error occurred while updating: " + e.getMessage(),
+                        "Update Error",
+                        JOptionPane.ERROR_MESSAGE);
+                }
+            }
+        }.execute();
     }
 
     // Custom cell renderer for status column

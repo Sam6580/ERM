@@ -33,13 +33,40 @@ public class ERMClient {
     // Request all reflections from the server
     @SuppressWarnings("unchecked")
     public List<Reflection> fetchReflections() throws IOException, ClassNotFoundException {
-        oos.writeObject("FETCH");
-        oos.flush();
-        Object response = ois.readObject();
-        if (response instanceof List<?>) {
-            return (List<Reflection>) response;
-        } else {
-            throw new IOException("Invalid response from server.");
+        try {
+            if (socket == null || socket.isClosed() || oos == null) {
+                throw new IOException("Connection is closed");
+            }
+            oos.writeObject("FETCH");
+            oos.flush();
+            Object response = ois.readObject();
+            if (response instanceof List<?>) {
+                return (List<Reflection>) response;
+            } else if (response instanceof String && ((String) response).startsWith("❌")) {
+                throw new IOException((String) response);
+            } else {
+                throw new IOException("Invalid response from server: " + response);
+            }
+        } catch (IOException | ClassNotFoundException e) {
+            // Don't close connection on error - let it be reused
+            throw e;
+        }
+    }
+
+    // Update a reflection with feedback, rating, and status
+    public String updateReflection(Reflection reflection) throws IOException, ClassNotFoundException {
+        try {
+            if (socket == null || socket.isClosed() || oos == null) {
+                throw new IOException("Connection is closed");
+            }
+            oos.writeObject("UPDATE");
+            oos.flush();
+            oos.writeObject(reflection);
+            oos.flush();
+            Object response = ois.readObject();
+            return response instanceof String ? (String) response : "Unexpected response from server.";
+        } catch (IOException | ClassNotFoundException e) {
+            throw e;
         }
     }
 
